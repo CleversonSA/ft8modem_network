@@ -1,12 +1,3 @@
-#
-#
-#   Makefile
-#
-#   Copyright (C) 2023 by Matt Roberts.
-#   License: GNU GPL2 (www.gnu.org)
-#
-#
-
 TARGETS1=ft8modem ft8encode test_decode
 TARGETS=$(TARGETS1)
 OBJECTS1=nlimits.o call_sign_driver.o
