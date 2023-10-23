@@ -1,0 +1,382 @@
+#!/usr/bin/env python3
+#
+#   ft8cat - cat wrapper around ft8modem
+#
+#   CAT wrapper around 'ft8modem':
+#     * connects to 'rigctld' for radio control.
+#     * reads radio RF VFOA, VFOB, Split.
+#     * performs PTT funcions on behalf of the modem.
+#     * when in split mode, controls radio split and VFOB.
+#
+#   Copyright (C) 2023 by Matt Roberts.
+#   License: GNU GPL3 (www.gnu.org)
+#
+#
+
+# system modules
+import subprocess
+import getopt
+import socket
+import select
+import time
+import sys
+import os
+import io
+
+
+# globals
+TimeoutCAT = 2.0 # sec
+
+# transmitted AF for split operation; VFOB is moved to put this at
+#   the audio frequency requested by the user
+RealAF = 2000 # Hz
+
+
+#
+#  compute_fb(fa, af_tx, af_user) - compute the VFO B frequency for transmission
+#
+def compute_fb(fa, af_tx, af_user):
+	return fa + af_user - af_tx
+
+
+#
+#  append_text(...) - append to ALL.TXT
+#
+def append_text(fn, fa, line, tx = False):
+	if not line:
+		return
+	if not fa:
+		fa = 0
+	af = '0'
+	snr = '0'
+	df = '0.0'
+	what = None
+	mode = None
+	tr = "Tx" if tx else "Rx"
+	f = "%9.3f" % (fa / 1000000)
+	try:
+		if tx:
+			parts = line.split(maxsplit=3)
+			af = parts[1]
+			what = parts[2]
+			mode = "TX"
+			# TODO: find a better way to get this value
+			if "FT8" in sys.argv:
+				mode = "FT8"
+			elif "ft8" in sys.argv:
+				mode = "FT8"
+			elif "FT4" in sys.argv:
+				mode = "FT4"
+			elif "ft4" in sys.argv:
+				mode = "FT4"
+		else:
+			parts = line.split(maxsplit=5)
+			mode = "FT4" if parts[4] == '+' else "FT8"
+			af = parts[3]
+			df = parts[2]
+			snr = parts[1]
+			what = parts[5]
+		tm = time.gmtime(int(parts[0]))
+		ts = "%02d%02d%02d_%02d%02d%02d" % (tm[0] % 100, tm[1], tm[2], tm[3], tm[4], tm[5])
+		line = "%s %s %s %s %6s %4s %4s %s\n" % (ts, f, tr, mode, snr, df, af, what)
+		with io.open(fn, 'a') as f:
+			f.write(line)
+	except Exception as ex:
+		sys.stdout.write("TRACE: append_text failed: %s\n" % str(ex))
+		sys.stdout.flush()
+
+
+#
+#  usage()
+#
+def usage():
+	sys.stdout.write("Usage: %s [-s][-a <fn>] <ft8modem command line>\n" % sys.argv[0])
+	sys.exit(1)
+
+
+#
+#  main()
+#
+def main():
+	global TimeoutCAT
+	global RealAF
+
+	# split option
+	UseSplit = False
+
+	# all txt option
+	AllTextPath = None
+
+	# read the command line
+	optlist, cmdline = getopt.getopt(sys.argv[1:], 'sa:')
+	for opt in optlist:
+		if opt[0] == '-s':
+			UseSplit = True
+		if opt[0] == '-a':
+			AllTextPath = opt[1]
+
+	# and validate it
+	if not cmdline:
+		usage()
+
+	# start the ft8modem
+	sys.stdout.write("TRACE: start modem, args = %s\n" % str(cmdline))
+	sys.stdout.flush()
+	ft8modem = subprocess.Popen(cmdline, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+	if not ft8modem:
+		sys.stdout.write("ERR: Could not start ft8modem\n")
+		sys.exit(1)
+	os.set_blocking(ft8modem.stdout.fileno(), False)
+	os.set_blocking(sys.stdout.fileno(), False)
+	os.set_blocking(sys.stdin.fileno(), False)
+	
+	catbuf = '' # ingress buffer for CAT socket
+	egbuf = ''  # pipeline egress buffer
+	igbuf = ''  # pipeline ingress buffer
+	fa = None
+	fb = None
+	split = None
+	catsock = None
+	catscan = [ 'f', 'i', 's' ] # commands to scan (FA, FB, split)
+	catidx = -1
+	cattime = 0 # time last command sent
+	catcon = 0  # last time connect attempted
+	ptt = '0'   # last PTT state
+	msg = None  # last message text sent
+	while True:
+		try:
+			# keep CAT connection going
+			now = time.time()
+			if not catsock and (now - catcon >= 1.0):
+				catcon = now
+				try:
+					catsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+					catsock.connect(('localhost', 4532))
+					os.set_blocking(catsock.fileno(), False)
+				except:
+					sys.stdout.write("DEBUG: CAT connect failed\n")
+					sys.stdout.flush()
+					catsock = None
+
+			r = [ ft8modem.stdout, sys.stdin ]
+			if catsock:
+				r.append(catsock)
+			w = [ ] # TODO: include CAT socket??
+			e = [ ]
+			r, w, e = select.select(r, w, e, 0.5)
+
+			#
+			#  modem -> user
+			#
+			if ft8modem.stdout in r:
+				buf = ft8modem.stdout.read(128)
+				buf = buf.decode('utf-8')
+				if not buf:
+					break
+				egbuf += buf
+				while '\n' in egbuf:
+					line, egbuf = egbuf.split('\n', 1)
+
+					# TX request
+					if line.startswith("TX: "):
+						sys.stdout.write("TRACE: Read PTT message\n")
+						sys.stdout.flush()
+
+						# send PTT update
+						ptt = line[4]
+						if ptt != '0' and msg:
+							tolog = str(round(time.time())) + ' ' + new_cmd
+							append_text(AllTextPath, fa, tolog, True)
+							msg = None
+						try:
+							if not catsock:
+								raise Exception("CAT not connected; cannot set PTT")
+
+							# send CAT command
+							catsock.send(("T %s\n" % ptt).encode('ascii'))
+						except:
+							sys.stdout.write("ERR: Could not set PTT\n")
+							sys.stdout.flush()
+
+					# decodes
+					elif line.startswith("D: "):
+						if AllTextPath:
+							raw = line[3:]
+							append_text(AllTextPath, fa, raw)
+
+					# pass the line towards the user
+					sys.stdout.write(line + '\n')
+					sys.stdout.flush()
+
+			#
+			#  user -> modem
+			#
+			if sys.stdin in r:
+				buf = sys.stdin.read(128)
+				if not buf:
+					break
+				igbuf += buf
+				while '\n' in igbuf:
+					# extract the first line from the ingress buffer
+					line, igbuf = igbuf.split('\n', 1)
+
+					# parse certain commands
+					if line.upper() == 'STOP':
+						ft8modem.stdin.write((line + '\n').encode('ascii'))
+						ft8modem.stdin.flush()
+						continue
+
+					# try to pick off the TX AF requested,
+					#   so we can modify it in split mode
+					parts = line.split(' ', 1)
+
+					if len(parts) != 2 or not parts[0] or not parts[0][0].isdigit():
+						# just pass the message to the modem directly
+						ft8modem.stdin.write((line + '\n').encode('ascii'))
+						ft8modem.stdin.flush()
+						continue
+
+					# get the two strings
+					afstr, txmsg = parts
+					if txmsg:
+						txmsg = txmsg.upper()
+
+					# get E/O
+					even = None
+					if afstr[-1] in 'EeOo':
+						even = afstr[-1] in 'Ee'
+						afstr = afstr[:-1]
+					if afstr.isdigit():
+						af = int(afstr)
+					else:
+						# just pass the message to the modem directly
+						sys.stdout.write("TRACE: pass-thru: %s\n" % line)
+						sys.stdout.flush()
+						ft8modem.stdin.write((line + '\n').encode('ascii'))
+						ft8modem.stdin.flush()
+						continue
+					eo = ''
+					if not even is None:
+						eo = 'E' if even else 'O'
+
+					new_cmd = None
+					if UseSplit:
+						# compute the FB for transmission
+						fb = compute_fb(fa, RealAF, af)
+
+						try:
+							if not catsock:
+								raise Exception("CAT not connected; cannot set TX frequency")
+
+							# set the TX frequency
+							catsock.send(("I %d\n" % fb).encode('ascii'))
+
+							# build the new message
+							new_cmd = "%d%s %s" % (RealAF, eo.upper(), txmsg)
+						except Exception as ex:
+							sys.stdout.write("ERR: Could not set split frequency: %s\n" % str(ex))
+							sys.stdout.flush()
+							
+					else:
+						# pass thru the command as-is, since split is disabled
+						new_cmd = "%d%s %s" % (af, eo.upper(), txmsg)
+
+					# if there's a TX command, send it
+					if new_cmd:
+						# log to ALL.txt
+						if AllTextPath and ptt != '0':
+							tolog = str(round(time.time())) + ' ' + new_cmd
+							append_text(AllTextPath, fa, tolog, True)
+
+						# save the message to be sent
+						msg = new_cmd
+
+						# send the command
+						sys.stdout.write("TRACE: send to modem: %s\n" % new_cmd)
+						sys.stdout.flush()
+						ft8modem.stdin.write((new_cmd + '\n').encode('ascii'))
+						ft8modem.stdin.flush()
+
+			# CAT responses
+			if catsock in r:
+				buf = catsock.recv(128)
+				if not buf:
+					try:
+						catsock.close()
+					except:
+						catsock = None
+				catbuf += buf.decode('ascii')
+				while '\n' in catbuf:
+					line, catbuf = catbuf.split('\n', 1)
+					#sys.stdout.write("TRACE: CAT returned -> %s\n" % line)
+
+					# handle specific messages
+					if line:
+						if line.startswith("RPRT "):
+							pass # just a command OK
+						elif cmd == 'f':
+							newfa = int(line)
+							if newfa != fa:
+								fa = newfa
+								sys.stdout.write("FA: %d\n" % fa)
+								sys.stdout.flush()
+							cattime -= TimeoutCAT * 0.75
+						elif cmd == 'i':
+							newfb = int(line)
+							if newfb != fb:
+								fb = newfb
+								sys.stdout.write("FB: %d\n" % fb)
+								sys.stdout.flush()
+							cattime -= TimeoutCAT * 0.75
+						elif cmd == 's':
+							if line[0].isdigit(): 
+								newsplit = (line[0] == '1')
+								if newsplit != split:
+									split = newsplit
+									sys.stdout.write("SPLIT: %d\n" % split)
+									sys.stdout.flush()
+								if split == UseSplit:
+									cattime -= TimeoutCAT * 0.75
+								else:
+									#sys.stdout.write("DEBUG: split = %d\n" % split)
+									#sys.stdout.flush()
+									cmd = None
+									cmd = "S 1 VFOB\n" if UseSplit else "S 0 VFOA\n"
+									try:
+										catsock.send(cmd.encode('ascii'))
+										sys.stdout.write("TRACE: CAT send '%s'\n" % cmd.strip())
+										sys.stdout.flush()
+									except Exception as ex:
+										sys.stdout.write("ERR: CAT command '%s' failed: %s\n" % (cmd, str(ex)))
+										sys.stdout.flush()
+										
+
+			#  run periodic CAT commands to update state
+			now = time.time()
+			if catsock and (now - cattime) >= TimeoutCAT:
+				catidx = (catidx + 1) % len(catscan)
+				cmd = catscan[catidx]
+				try:
+					catsock.send((cmd + '\r\n').encode('ascii'))
+					#sys.stdout.write("TRACE: Sent CAT '%s'\n" % cmd)
+					cattime = now
+				except Exception as ex:
+					sys.stdout.write("ERR: CAT command '%s' failed: %s\n" % (cmd, str(ex)))
+					sys.stdout.flush()
+		except KeyboardInterrupt as ex:
+			ft8modem.stdin.close()
+			sys.exit(0)
+		except Exception as ex:
+			sys.stdout.write("DEBUG: caught unexpected: %s\n" % str(ex))
+			sys.stdout.flush()
+
+	sys.exit(0)
+
+
+#
+#  entry point
+#
+if __name__ == '__main__':
+	main()
+
+# EOF
