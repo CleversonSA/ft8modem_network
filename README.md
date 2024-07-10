@@ -14,15 +14,15 @@ https://github.com/CleversonSA/ft8msxclient
 
 # PREREQUISITES
 
-    - This project depends on the 'rtaudio' package, available here:
+ This project depends on the 'rtaudio' package, available here:
 
-        https://www.music.mcgill.ca/~gary/rtaudio/
+    https://www.music.mcgill.ca/~gary/rtaudio/
 
-        Please follow the instructions there for installation.
+    Please follow the instructions there for installation.
 
     ATTENTION: This fork uses the 5.2.0 version of this package. You will need download this tag version. Newer versions are incompatible and will give errors when compiling the ft8modem (Oct/2023).
 
-    - Also you need install WSJT-X first, because the jt9 program embedded into the application. This is the heart of decoding signals and ft8modem heavily uses it. To compile and install, follow the instructions in WSJT-X home page:
+    Also you need install WSJT-X first, because the jt9 program embedded into the application. This is the heart of decoding signals and ft8modem heavily uses it. To compile and install, follow the instructions in WSJT-X home page:
 
    https://wsjt.sourceforge.io/wsjtx.html
 
