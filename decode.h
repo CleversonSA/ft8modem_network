@@ -121,6 +121,8 @@ namespace KK5JY {
 			m_Depth = depth;
 			m_Samples = 0;
 
+			std::cerr << "The mode is "<< m_Mode << std::endl;
+
 			// open the sound file
 			m_WAV = new SoundFile(wav_path, JT9_RATE, 1,
                 SoundFile::major_formats::wav,
@@ -219,19 +221,16 @@ namespace KK5JY {
 		//  the worker thread
 		//
 		inline void *decoder_thread(void *parent) {
-			#ifdef VERBOSE_DEBUG
-			std::cerr << "thread start" << std::endl;
-			#endif
+
+			std::cerr << "Starting decoder thread..." << std::endl;
+
 
 			DecodeBase *decode = reinterpret_cast<DecodeBase*>(parent);
 			if ( ! decode)
 				pthread_exit(0);
 
 			try {
-				#ifdef VERBOSE_DEBUG
-				std::cerr << "try" << std::endl;
-				std::cerr << "file is " << decode->m_Path << std::endl;
-				#endif
+				std::cerr << "Recorded audio file is " << decode->m_Path << std::endl;
 
 				// start 'jt9' on the temp file
 				std::string cmd = "jt9";
@@ -245,11 +244,11 @@ namespace KK5JY {
 				cmd += decode->m_Path;
 				FILE *jt9 = popen(cmd.c_str(), "r");
 
-				#ifdef VERBOSE_DEBUG
-				std::cerr << "popen(" << cmd << ")" << std::endl;
+				//#ifdef VERBOSE_DEBUG
+				std::cerr << "JT9 command line is '" << cmd << "'" << std::endl;
 				if (jt9)
-					std::cerr << "jt9 started" << std::endl;
-				#endif
+					std::cerr << "JT9 started" << std::endl;
+				//#endif
 
 				// I/O loop on 'jt9' output
 				char iobuffer[128];
@@ -259,9 +258,7 @@ namespace KK5JY {
 					if (ct <= 0)
 						break;
 
-					#ifdef VERBOSE_DEBUG
-					std::cerr << "jt9 sent " << ct << " bytes" << std::endl;
-					#endif
+					std::cerr << "JT9 sent (" << ct << ") bytes" << std::endl;
 
 					// process the new data
 					linebuffer.append(iobuffer, ct);
@@ -288,14 +285,10 @@ namespace KK5JY {
 					idx = linebuffer.find('\n');
 				}
 			} catch (const std::exception &ex) {
-				#ifdef VERBOSE_DEBUG
 				std::cerr << "caught exception: " << ex.what() << std::endl;
-				#endif
 			}
 
-			#ifdef VERBOSE_DEBUG
-			std::cerr << "thread complete" << std::endl;
-			#endif
+			std::cerr << "Decode thread complete" << std::endl;
 
 			// all done
 			unlink(decode->m_Path.c_str());

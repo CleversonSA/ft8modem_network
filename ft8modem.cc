@@ -102,7 +102,8 @@ int main(int argc, char**argv) {
 	short depth = 2; // 2 = Normal
 	if (argc == 3)
 		depth = atoi(argv[2]);
-
+	
+	cout << "Selected card is " << dev << endl;
 	// initialize sound card
 	ModemSoundDevice audio(mode, dev, 48000, 256);
 	audio.setDepth(depth);
@@ -116,7 +117,7 @@ int main(int argc, char**argv) {
 		exit(EXIT_FAILURE);
 	}
 	//pthread_join(asyncDecodeThreads[0], (void **)&ret);
-	cout << "Initialized" << endl;
+	cout << "App Initialized" << endl;
 
 	// read transmit messages
 	std::string msg = "";
@@ -145,16 +146,15 @@ int main(int argc, char**argv) {
 
 
 	// Network start
-    if (bind(server_fd, (struct sockaddr*)&address,
-             sizeof(address))
-        < 0) {
-        perror("bind failed");
-        exit(EXIT_FAILURE);
-    }
-    if (listen(server_fd, 3) < 0) {
-        perror("listen");
-        exit(EXIT_FAILURE);
-    }
+   	 if (bind(server_fd, (struct sockaddr*)&address,
+        	     sizeof(address)) < 0) {
+        	perror("bind failed");
+        	exit(EXIT_FAILURE);
+    	}
+    	if (listen(server_fd, 3) < 0) {
+        	perror("listen");
+        	exit(EXIT_FAILURE);
+    	}
 
 	while (true) {
 
@@ -437,7 +437,7 @@ void handleDecodedMessages(vector<DecodedLine> * newMessagesPtr)
 			
 			}
 
-			
+						
 
 			if (cqOnlyEnabled == true) 
 			{
@@ -450,7 +450,10 @@ void handleDecodedMessages(vector<DecodedLine> * newMessagesPtr)
 				}
 			}
 			
+
 			cacheDecodedMessages.insert(cacheDecodedMessages.begin(), (*newMessagesPtr)[i]);
+
+			cerr << (*newMessagesPtr)[i].getContent().c_str() << endl;
 
 			decodedMessageQt++;
 
@@ -556,7 +559,7 @@ void printDecodedMessages()
 
 		if(decodedMessagePtr != 0) {
 
-			if (strlen(decodedMessagePtr) <=                                                                     )
+			if (strlen(decodedMessagePtr) <= 5)
 			{
 
 				strcat(csvLine, " ");
@@ -629,7 +632,7 @@ void *asyncDecodeMessage(void * arg)
 		vector<DecodedLine> *decLinesPtr = ((ModemSoundDevice *)arg)->run();
 		handleDecodedMessages(decLinesPtr);
 		delete decLinesPtr;
-
+                
 	}
 
 	pthread_exit(NULL);

@@ -1,4 +1,4 @@
-﻿FT8MODEM FOR NETWORK 
+﻿# FT8MODEM FOR NETWORK 
 
 Network service modem application for FT8, forked from KK5JY original project and creator:
 
@@ -12,19 +12,23 @@ https://github.com/CleversonSA/ft8msxclient
 
 
 
-* PREREQUISITES
+# PREREQUISITES
 
-This project depends on the 'rtaudio' package, available here:
+    - This project depends on the 'rtaudio' package, available here:
 
-https://www.music.mcgill.ca/~gary/rtaudio/
+        https://www.music.mcgill.ca/~gary/rtaudio/
 
-Please follow the instructions there for installation.
+        Please follow the instructions there for installation.
 
-ATTENTION: This fork uses the 5.2.0 version of this package. You will need download this tag version. Newer versions are incompatible and will give errors when compiling the ft8modem (Oct/2023).
+    ATTENTION: This fork uses the 5.2.0 version of this package. You will need download this tag version. Newer versions are incompatible and will give errors when compiling the ft8modem (Oct/2023).
 
+    - Also you need install WSJT-X first, because the jt9 program embedded into the application. This is the heart of decoding signals and ft8modem heavily uses it. To compile and install, follow the instructions in WSJT-X home page:
 
+   https://wsjt.sourceforge.io/wsjtx.html
 
-* INSTALLATION
+ 
+
+# INSTALLATION
 
 To build the modem application, run at the command line:
 
@@ -36,7 +40,7 @@ To install to /usr/local/bin, run:
 
 
 
-* RUNNING
+# RUNNING
 
 To run the application:
 
@@ -63,7 +67,7 @@ Run a command:
 
 
 
-* TCP NETWORK COMMANDS
+# TCP NETWORK COMMANDS
 
 As a network service, It will be decoding FT8 signals in background, keep a internal memory log of decoded messages.
 
@@ -115,6 +119,6 @@ You can transmit also, but it will be available soon:
 
         
 
-* LICENSE
+# LICENSE
 
     - GPL v3

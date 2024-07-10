@@ -1,4 +1,1 @@
-000000  14   -6  -0.0    497.   0   TF2MSN LU9WE FE64                     FT8
-000000   8  -13   0.2    443.   0   CQ LU LU3HFS FF78                     FT8
-000000   7  -13   0.1    605.   0   KJ4AXB CU2AP RR73                     FT8
-000000   6  -14   0.1   2045.   0   VE6TL LU9DCE -20                      FT8
+000000   2  -12   0.3   1918.   0   CQ LU6YR FF51                         FT8
