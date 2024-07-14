@@ -1,5 +1,5 @@
 /*
-    Software modem for FT8/FT4.
+   Software modem for FT8/FT4.
     Copyright (C) 2023  Matt Roberts (Creator/Original project)
 				  2023	Cleverson S A (Network and aditional features support)
 
@@ -559,7 +559,7 @@ void printDecodedMessages()
 
 		if(decodedMessagePtr != 0) {
 
-			if (strlen(decodedMessagePtr) <= 5)
+			if (strlen(decodedMessagePtr) <= 1)
 			{
 
 				strcat(csvLine, " ");
