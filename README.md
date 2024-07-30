@@ -26,6 +26,10 @@ Also you need install WSJT-X first, because the jt9 program embedded into the ap
 
    https://wsjt.sourceforge.io/wsjtx.html
 
+Also you need install the library:
+
+    sudo apt install libsndfile1-dev
+
  
 
 # INSTALLATION
